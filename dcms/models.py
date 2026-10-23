@@ -29,6 +29,7 @@ class ContractRequest:
     effort: int          # estimated handling time
     due_at: int          # absolute time the request must be finished by
     priority: int = 3    # 1 (critical) to 4 (routine)
+    estimated_effort: Optional[float] = None  # what policies see; defaults to effort
     remaining_effort: int = field(init=False)
     status: RequestStatus = field(default=RequestStatus.SUBMITTED, init=False)
     started_at: Optional[int] = field(default=None, init=False)
@@ -41,7 +42,34 @@ class ContractRequest:
             raise ValueError(f"{self.request_id}: submitted_at cannot be negative")
         if self.due_at < self.submitted_at + self.effort:
             raise ValueError(f"{self.request_id}: due date is unreachable")
+        if not 1 <= self.priority <= 4:
+            raise ValueError(f"{self.request_id}: priority must be between 1 and 4")
+        if self.estimated_effort is None:
+            self.estimated_effort = float(self.effort)
         self.remaining_effort = self.effort
+
+    @property
+    def work_done(self) -> int:
+        return self.effort - self.remaining_effort
+
+    @property
+    def estimated_remaining(self) -> float:
+        """Remaining effort as a policy sees it (the actual value is unknown in advance)."""
+        return max(self.estimated_effort - self.work_done, 0.0)
+
+    def pcb(self) -> dict:
+        """The request viewed as a Process Control Block."""
+        return {
+            "PID": self.request_id,
+            "State": self.status.value,
+            "Priority": self.priority,
+            "Arrival": self.submitted_at,
+            "Burst": self.effort,
+            "Remaining": self.remaining_effort,
+            "Progress (PC)": f"{self.work_done}/{self.effort}",
+            "Deadline": self.due_at,
+            "Resource": self.contract_id,
+        }
 
     @property
     def total_handling_time(self) -> Optional[int]:
